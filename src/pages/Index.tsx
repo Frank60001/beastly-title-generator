@@ -1,9 +1,7 @@
 
 import { ImageUploader } from "@/components/ImageUploader";
 import { TitleCard } from "@/components/TitleCard";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { formatError } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,9 +16,11 @@ export default function Index() {
       // TODO: Implement AI analysis
       // This is where we'll add the Gemini and OpenAI integration
       const mockTitles = [
-        "I Gave $10,000 to Anyone Who Could Solve This Puzzle!",
-        "Last to Leave This Luxury Island Wins It!",
-        "I Bought Everything in 5 Stores!"
+        "I Gave $10,000 to Anyone Who Could Solve This Puzzle In 24 Hours!",
+        "Last to Leave This Luxury Island Wins a Tesla!",
+        "I Bought Everything in 5 Stores and Gave It All Away!",
+        "Spending 24 Hours in the World's Most Expensive Hotel!",
+        "First to Find the Golden Ticket Wins $50,000!"
       ];
       setTitles(mockTitles);
     } catch (error) {
@@ -48,14 +48,27 @@ export default function Index() {
         />
 
         {titles.length > 0 && (
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Generated Titles</h2>
-            <div className="space-y-3">
-              {titles.map((title, index) => (
-                <TitleCard key={index} title={title} />
-              ))}
-            </div>
-          </Card>
+          <div className="space-y-6">
+            <Card className="p-6">
+              <h2 className="text-lg font-semibold mb-4">Top Picks</h2>
+              <div className="space-y-3">
+                {titles.slice(0, 2).map((title, index) => (
+                  <TitleCard key={index} title={title} />
+                ))}
+              </div>
+            </Card>
+
+            {titles.length > 2 && (
+              <Card className="p-6">
+                <h2 className="text-lg font-semibold mb-4">More Options</h2>
+                <div className="space-y-3">
+                  {titles.slice(2).map((title, index) => (
+                    <TitleCard key={index + 2} title={title} />
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
         )}
       </div>
     </div>

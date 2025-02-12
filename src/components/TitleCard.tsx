@@ -16,8 +16,8 @@ export const TitleCard = ({ title }: TitleCardProps) => {
 
   return (
     <Card className="p-4 flex items-center justify-between gap-4 hover:shadow-lg transition-shadow">
-      <p className="text-sm font-medium flex-1">{title}</p>
-      <Button variant="ghost" size="icon" onClick={copyToClipboard}>
+      <p className="text-sm font-medium flex-1 break-words">{title}</p>
+      <Button variant="ghost" size="icon" onClick={copyToClipboard} className="shrink-0">
         <Copy className="w-4 h-4" />
       </Button>
     </Card>
