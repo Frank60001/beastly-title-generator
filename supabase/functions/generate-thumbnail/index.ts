@@ -30,9 +30,57 @@ serve(async (req) => {
       return match && match[2].length === 11 ? match[2] : null;
     };
 
-    // Function to generate MrBeast-style titles using Gemini
-    const generateTitles = async (originalTitle: string, thumbnailUrl: string) => {
-      const prompt = `You are MrBeast's title writer. Based on this YouTube title: "${originalTitle}" and thumbnail URL: ${thumbnailUrl}, generate 3 alternative viral YouTube titles in MrBeast's style. Focus on big numbers, challenge concepts, and dramatic hooks. Format as a JSON array of strings.`;
+    // Function to analyze image and generate titles using Gemini Vision
+    const analyzeImageAndGenerateTitles = async (imageUrl: string) => {
+      console.log('Analyzing image:', imageUrl);
+      
+      // Fetch the image data
+      const imageResponse = await fetch(imageUrl);
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+
+      const prompt = "You are MrBeast's title writer. Based on this image, generate 3 viral YouTube titles in MrBeast's style. Focus on big numbers, challenge concepts, and dramatic hooks. Make them exciting and clickworthy. Format the response as a JSON array of strings only.";
+
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              {
+                inline_data: {
+                  mime_type: "image/jpeg",
+                  data: base64Image
+                }
+              }
+            ]
+          }]
+        }),
+      });
+
+      const data = await response.json();
+      console.log('Gemini Vision response:', data);
+      
+      const titlesText = data.candidates[0].content.parts[0].text;
+      try {
+        return JSON.parse(titlesText);
+      } catch (e) {
+        console.error('Error parsing Gemini Vision response:', e);
+        // Fallback parsing: extract titles from text
+        return titlesText
+          .split('\n')
+          .filter(line => line.length > 0)
+          .slice(0, 3);
+      }
+    };
+
+    // Function to generate MrBeast-style titles using Gemini for text
+    const generateTitlesFromText = async (originalTitle: string) => {
+      const prompt = `You are MrBeast's title writer. Based on this YouTube title: "${originalTitle}", generate 3 alternative viral YouTube titles in MrBeast's style. Focus on big numbers, challenge concepts, and dramatic hooks. Format as a JSON array of strings.`;
       
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
         method: 'POST',
@@ -52,7 +100,6 @@ serve(async (req) => {
         return JSON.parse(titlesText);
       } catch (e) {
         console.error('Error parsing Gemini response:', e);
-        // Fallback parsing: extract titles from text
         return titlesText
           .split('\n')
           .filter(line => line.length > 0)
@@ -87,6 +134,7 @@ serve(async (req) => {
     let originalTitle = '';
     let thumbnailUrl = '';
     let videoData = null;
+    let generatedTitles = [];
 
     // Handle YouTube URL analysis
     if (youtubeUrl) {
@@ -108,10 +156,17 @@ serve(async (req) => {
       originalTitle = videoData.items[0].snippet.title;
       thumbnailUrl = videoData.items[0].snippet.thumbnails.maxres?.url || 
                     videoData.items[0].snippet.thumbnails.high?.url;
+      
+      // Generate titles based on both the original title and thumbnail
+      const textTitles = await generateTitlesFromText(originalTitle);
+      const imageTitles = await analyzeImageAndGenerateTitles(thumbnailUrl);
+      
+      // Combine and deduplicate titles
+      generatedTitles = [...new Set([...textTitles, ...imageTitles])].slice(0, 3);
+    } else if (uploadedImageUrl) {
+      // Generate titles based on the uploaded image
+      generatedTitles = await analyzeImageAndGenerateTitles(uploadedImageUrl);
     }
-
-    // Generate new titles
-    const generatedTitles = await generateTitles(originalTitle || 'Custom Image Upload', thumbnailUrl || uploadedImageUrl);
 
     // Generate new thumbnail if prompted
     let generatedThumbnailUrl = null;
