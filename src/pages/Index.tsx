@@ -8,6 +8,7 @@ import { formatError } from "@/lib/utils";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Youtube, Upload, Wand2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Index() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -16,6 +17,7 @@ export default function Index() {
   const [urlTitles, setUrlTitles] = useState<string[]>([]);
   const [imageTitles, setImageTitles] = useState<string[]>([]);
   const [generatedThumbnail, setGeneratedThumbnail] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
 
   const handleUrlGenerate = async () => {
     if (!youtubeUrl) {
@@ -24,13 +26,15 @@ export default function Index() {
     }
     setIsAnalyzing(true);
     try {
-      // TODO: Implement AI analysis
-      const mockTitles = [
-        "I Gave $10,000 to Anyone Who Could Solve This Puzzle In 24 Hours!",
-        "Last to Leave This Luxury Island Wins a Tesla!",
-        "I Bought Everything in 5 Stores and Gave It All Away!"
-      ];
-      setUrlTitles(mockTitles);
+      const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
+        body: { youtubeUrl }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      setUrlTitles(data.data.generatedTitles);
+      toast.success("Generated titles successfully!");
     } catch (error) {
       toast.error(formatError(error));
     } finally {
@@ -41,13 +45,33 @@ export default function Index() {
   const handleImageSelect = async (file: File) => {
     setIsAnalyzing(true);
     try {
-      // TODO: Implement AI analysis
-      const mockTitles = [
-        "First Person to Find the Hidden $50,000 WINS IT!",
-        "Surviving 100 Hours in a Haunted Mansion!",
-        "I Built the World's Largest Pizza and Fed an Entire City!"
-      ];
-      setImageTitles(mockTitles);
+      // First upload the image to Supabase Storage
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${crypto.randomUUID()}.${fileExt}`;
+      
+      const { error: uploadError, data: uploadData } = await supabase.storage
+        .from('thumbnails')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get the public URL of the uploaded image
+      const { data: { publicUrl } } = supabase.storage
+        .from('thumbnails')
+        .getPublicUrl(filePath);
+
+      setUploadedImageUrl(publicUrl);
+
+      // Generate titles based on the uploaded image
+      const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
+        body: { uploadedImageUrl: publicUrl }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      setImageTitles(data.data.generatedTitles);
+      toast.success("Generated titles successfully!");
     } catch (error) {
       toast.error(formatError(error));
     } finally {
@@ -62,9 +86,14 @@ export default function Index() {
     }
     setIsAnalyzing(true);
     try {
-      // TODO: Implement AI thumbnail generation
-      // Mockup for now
-      setGeneratedThumbnail("https://placehold.co/1280x720/1a1f2c/ffffff/png?text=Generated+Thumbnail");
+      const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
+        body: { customPrompt }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+
+      setGeneratedThumbnail(data.data.generatedThumbnailUrl);
       toast.success("Thumbnail generated successfully!");
     } catch (error) {
       toast.error(formatError(error));
