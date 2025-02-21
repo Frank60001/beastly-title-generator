@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ImageIcon, Loader2 } from 'lucide-react';
+import { ImageIcon, Loader2, Upload } from 'lucide-react';
 
 interface ImageUploaderProps {
   onImageSelect: (file: File) => void;
@@ -35,15 +35,16 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
   });
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full">
       <div
         {...getRootProps()}
         className={cn(
           "border-2 border-dashed rounded-lg p-8 transition-all cursor-pointer",
-          "hover:border-emerald-500 hover:bg-emerald-50/50",
-          isDragActive && "border-emerald-500 bg-emerald-50/50",
+          "hover:border-blue-500 hover:bg-[#2A2A2A]",
+          isDragActive && "border-blue-500 bg-[#2A2A2A]",
           "flex flex-col items-center justify-center gap-4",
-          isLoading && "opacity-50 cursor-not-allowed"
+          isLoading && "opacity-50 cursor-not-allowed",
+          "bg-[#333] border-[#444]"
         )}
       >
         <input {...getInputProps()} />
@@ -57,9 +58,9 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
           </div>
         ) : (
           <>
-            <ImageIcon className="w-12 h-12 text-gray-400" />
+            <Upload className="w-12 h-12 text-gray-400" />
             <div className="text-center">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-gray-300">
                 Drag and drop your image here, or click to select
               </p>
               <p className="text-xs text-gray-500 mt-1">
@@ -69,8 +70,8 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
           </>
         )}
         {isLoading && (
-          <div className="absolute inset-0 bg-white/80 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
+          <div className="absolute inset-0 bg-[#222]/80 flex items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
           </div>
         )}
       </div>
