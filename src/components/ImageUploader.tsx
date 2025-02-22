@@ -3,7 +3,9 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ImageIcon, Loader2, Upload, Wand2 } from 'lucide-react';
+import { Loader2, Upload, Wand2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface ImageUploaderProps {
   onImageSelect: (file: File) => void;
@@ -13,6 +15,7 @@ interface ImageUploaderProps {
 export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) => {
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [results, setResults] = useState<{ gemini: string[], gpt4: string[] } | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -26,9 +29,37 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
     }
   }, []);
 
-  const handleAnalyze = () => {
-    if (selectedFile && !isLoading) {
-      onImageSelect(selectedFile);
+  const handleAnalyze = async () => {
+    if (!selectedFile || isLoading) return;
+
+    try {
+      // Convert the file to base64
+      const reader = new FileReader();
+      reader.readAsDataURL(selectedFile);
+      reader.onloadend = async () => {
+        const base64Data = reader.result?.toString().split(',')[1]; // Remove data URL prefix
+        
+        if (!base64Data) {
+          toast.error("Failed to process image");
+          return;
+        }
+
+        const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
+          body: { image_base64: base64Data }
+        });
+
+        if (error) {
+          toast.error(error.message);
+          return;
+        }
+
+        if (data?.success) {
+          setResults(data.data.results);
+          toast.success("Analysis complete!");
+        }
+      };
+    } catch (error) {
+      toast.error("Failed to analyze image");
     }
   };
 
@@ -42,7 +73,7 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
   });
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-4">
       <div
         {...getRootProps()}
         className={cn(
@@ -68,7 +99,7 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
             <Upload className="w-12 h-12 text-gray-400" />
             <div className="text-center">
               <p className="text-sm text-gray-300">
-                Drag and drop your image here, or click to select
+                Drop an image here, or click to select
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Supports JPG, PNG and WebP
@@ -76,20 +107,43 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
             </div>
           </>
         )}
-        {isLoading && (
-          <div className="absolute inset-0 bg-[#222]/80 flex items-center justify-center">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-          </div>
-        )}
       </div>
+
       {preview && !isLoading && (
         <Button
           onClick={handleAnalyze}
-          className="w-full mt-4 bg-blue-500 hover:bg-blue-600"
+          className="w-full bg-blue-500 hover:bg-blue-600"
         >
           <Wand2 className="w-4 h-4 mr-2" />
-          Analyze Image
+          Analyze with AI
         </Button>
+      )}
+
+      {isLoading && (
+        <div className="flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        </div>
+      )}
+
+      {results && (
+        <div className="space-y-4 mt-4">
+          <div>
+            <h3 className="text-lg font-semibold text-blue-400 mb-2">Gemini Analysis</h3>
+            <ul className="space-y-2">
+              {results.gemini.map((title, i) => (
+                <li key={i} className="bg-[#2A2A2A] p-3 rounded">{title}</li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-green-400 mb-2">GPT-4 Analysis</h3>
+            <ul className="space-y-2">
+              {results.gpt4.map((title, i) => (
+                <li key={i} className="bg-[#2A2A2A] p-3 rounded">{title}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   );
