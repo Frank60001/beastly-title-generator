@@ -33,7 +33,7 @@ export default function Index() {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
-      setUrlTitles(data.data.generatedTitles);
+      setUrlTitles(data.data.generatedTitles || []);
       toast.success("Generated titles successfully!");
     } catch (error) {
       toast.error(formatError(error));
@@ -62,6 +62,15 @@ export default function Index() {
 
       setUploadedImageUrl(publicUrl);
 
+      // Save to thumbnails table
+      const { error: dbError } = await supabase
+        .from('thumbnails')
+        .insert({
+          uploaded_image_path: filePath,
+        });
+
+      if (dbError) throw dbError;
+
       // Generate titles based on the uploaded image
       const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
         body: { uploadedImageUrl: publicUrl }
@@ -70,7 +79,7 @@ export default function Index() {
       if (error) throw error;
       if (!data.success) throw new Error(data.error);
 
-      setImageTitles(data.data.generatedTitles);
+      setImageTitles(data.data.generatedTitles || []);
       toast.success("Generated titles successfully!");
     } catch (error) {
       toast.error(formatError(error));
