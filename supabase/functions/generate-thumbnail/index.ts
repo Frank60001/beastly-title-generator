@@ -1,9 +1,8 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
-const YOUTUBE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+const YOUTUBE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -36,11 +35,12 @@ async function analyzeImageWithGemini(imageUrl: string) {
               text: `You are MrBeast's title writer. Based on this image, generate 3 viral YouTube titles in MrBeast's style.
               Focus on:
               - High stakes or big rewards ($1M, survival challenges)
-              - Specific actions from the image
+              - Specific actions and objects from the image
               - Curiosity and urgency
               - Big numbers and extremes
               - Short, punchy phrases
-              Format as a JSON array of strings only.`
+              Return ONLY a JSON array of 3 strings, nothing else.
+              Example format: ["Title 1", "Title 2", "Title 3"]`
             },
             {
               inline_data: {
@@ -54,94 +54,19 @@ async function analyzeImageWithGemini(imageUrl: string) {
     });
 
     if (!response.ok) {
+      const error = await response.json();
+      console.error('Gemini API error:', error);
       throw new Error('Failed to analyze image with Gemini');
     }
 
     const data = await response.json();
-    console.log('Gemini response:', data);
+    console.log('Gemini analysis response:', data);
 
-    return JSON.parse(data.candidates[0].content.parts[0].text.trim());
+    // Extract the text content and parse it as JSON
+    const titlesText = data.candidates[0].content.parts[0].text.trim();
+    return JSON.parse(titlesText);
   } catch (error) {
     console.error('Error analyzing image:', error);
-    throw error;
-  }
-}
-
-async function generateThumbnailWithDallE(prompt: string) {
-  console.log('Generating thumbnail with DALL-E:', prompt);
-  
-  const enhancedPrompt = `Create a YouTube thumbnail in MrBeast's style: ${prompt}. 
-  Make it bold and dramatic with bright colors (red, yellow, blue), 
-  include shocked/excited expressions, and make it instantly clickable with 
-  exaggerated elements. Use high contrast and dynamic composition.`;
-
-  try {
-    const response = await fetch('https://api.openai.com/v1/images/generations', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "dall-e-3",
-        prompt: enhancedPrompt,
-        n: 1,
-        size: "1792x1024",
-        quality: "standard",
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('DALL-E API error:', error);
-      throw new Error('DALL-E API request failed');
-    }
-
-    const data = await response.json();
-    console.log('DALL-E response:', data);
-
-    return data.data[0].url;
-  } catch (error) {
-    console.error('Error generating with DALL-E:', error);
-    throw error;
-  }
-}
-
-async function generateThumbnailWithImagen(prompt: string) {
-  console.log('Generating thumbnail with Imagen:', prompt);
-
-  const enhancedPrompt = `Create a YouTube thumbnail in MrBeast's style: ${prompt}. 
-  Make it bold and dramatic with bright colors (red, yellow, blue), 
-  include shocked/excited expressions, and make it instantly clickable with 
-  exaggerated elements. Use high contrast and dynamic composition.`;
-
-  try {
-    const response = await fetch('https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:generateImages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        prompt: enhancedPrompt,
-        generation_config: {
-          numberOfImages: 1,
-        },
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      console.error('Imagen API error:', error);
-      throw new Error('Imagen API request failed');
-    }
-
-    const data = await response.json();
-    console.log('Imagen response:', data);
-
-    return data.images[0].imageUrl;
-  } catch (error) {
-    console.error('Error generating with Imagen:', error);
     throw error;
   }
 }
@@ -155,10 +80,54 @@ serve(async (req) => {
 
   try {
     console.log('Request received');
-    const { uploadedImageUrl, customPrompt, model = 'dalle' } = await req.json();
-    console.log('Request body:', { uploadedImageUrl, customPrompt, model });
+    const { uploadedImageUrl, youtubeUrl } = await req.json();
+    console.log('Request body:', { uploadedImageUrl, youtubeUrl });
 
-    // Handle uploaded image analysis
+    // Handle YouTube URL
+    if (youtubeUrl) {
+      console.log('Processing YouTube URL:', youtubeUrl);
+      const videoId = youtubeUrl.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/)?.[1];
+      
+      if (!videoId) {
+        throw new Error('Invalid YouTube URL');
+      }
+
+      const ytResponse = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+      );
+
+      if (!ytResponse.ok) {
+        throw new Error('Failed to fetch video data from YouTube');
+      }
+
+      const ytData = await ytResponse.json();
+      if (!ytData.items?.[0]?.snippet) {
+        throw new Error('Video not found');
+      }
+
+      const videoTitle = ytData.items[0].snippet.title;
+      const thumbnailUrl = ytData.items[0].snippet.thumbnails.maxres?.url || 
+                          ytData.items[0].snippet.thumbnails.high?.url;
+
+      console.log('Analyzing YouTube thumbnail:', thumbnailUrl);
+      const generatedTitles = await analyzeImageWithGemini(thumbnailUrl);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            originalTitle: videoTitle,
+            generatedTitles,
+          },
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        }
+      );
+    }
+
+    // Handle uploaded image
     if (uploadedImageUrl) {
       console.log('Analyzing uploaded image:', uploadedImageUrl);
       const generatedTitles = await analyzeImageWithGemini(uploadedImageUrl);
@@ -177,31 +146,10 @@ serve(async (req) => {
       );
     }
 
-    // Handle custom prompt for thumbnail generation
-    if (customPrompt) {
-      console.log('Generating thumbnail with model:', model);
-      const generatedThumbnailUrl = model === 'dalle' 
-        ? await generateThumbnailWithDallE(customPrompt)
-        : await generateThumbnailWithImagen(customPrompt);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            generatedThumbnailUrl,
-          },
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200
-        }
-      );
-    }
-
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'No valid input provided',
+        error: 'No image or YouTube URL provided',
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
