@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { ImageIcon, Loader2, Upload } from 'lucide-react';
+import { ImageIcon, Loader2, Upload, Wand2 } from 'lucide-react';
 
 interface ImageUploaderProps {
   onImageSelect: (file: File) => void;
@@ -12,18 +12,25 @@ interface ImageUploaderProps {
 
 export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) => {
   const [preview, setPreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (file) {
-      onImageSelect(file);
+      setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreview(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
-  }, [onImageSelect]);
+  }, []);
+
+  const handleAnalyze = () => {
+    if (selectedFile && !isLoading) {
+      onImageSelect(selectedFile);
+    }
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -75,6 +82,15 @@ export const ImageUploader = ({ onImageSelect, isLoading }: ImageUploaderProps) 
           </div>
         )}
       </div>
+      {preview && !isLoading && (
+        <Button
+          onClick={handleAnalyze}
+          className="w-full mt-4 bg-blue-500 hover:bg-blue-600"
+        >
+          <Wand2 className="w-4 h-4 mr-2" />
+          Analyze Image
+        </Button>
+      )}
     </div>
   );
 };
