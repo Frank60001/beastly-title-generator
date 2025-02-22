@@ -38,24 +38,32 @@ async function generateTitlesWithGemini(imageUrl: string | null, context: string
 
   let requestBody;
   if (imageUrl) {
-    // Fetch the image data
-    const imageResponse = await fetch(imageUrl);
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
+    try {
+      // Fetch the image data
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error('Failed to fetch image');
+      }
+      const imageBuffer = await imageResponse.arrayBuffer();
+      const base64Image = btoa(String.fromCharCode(...new Uint8Array(imageBuffer)));
 
-    requestBody = {
-      contents: [{
-        parts: [
-          { text: prompt },
-          {
-            inline_data: {
-              mime_type: "image/jpeg",
-              data: base64Image
+      requestBody = {
+        contents: [{
+          parts: [
+            { text: prompt },
+            {
+              inline_data: {
+                mime_type: "image/jpeg",
+                data: base64Image
+              }
             }
-          }
-        ]
-      }]
-    };
+          ]
+        }]
+      };
+    } catch (error) {
+      console.error('Error processing image:', error);
+      throw new Error('Failed to process image for title generation');
+    }
   } else {
     requestBody = {
       contents: [{ 
@@ -64,23 +72,31 @@ async function generateTitlesWithGemini(imageUrl: string | null, context: string
     };
   }
 
-  const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': GEMINI_API_KEY,
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  const data = await response.json();
-  console.log('Gemini response:', data);
-  
   try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
+      },
+      body: JSON.stringify(requestBody),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to generate titles with Gemini');
+    }
+
+    const data = await response.json();
+    console.log('Gemini response:', data);
+    
+    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      throw new Error('Invalid response from Gemini');
+    }
+
     const titlesText = data.candidates[0].content.parts[0].text;
     return JSON.parse(titlesText);
-  } catch (e) {
-    console.error('Error parsing Gemini response:', e);
+  } catch (error) {
+    console.error('Error in Gemini API call:', error);
     throw new Error('Failed to generate titles');
   }
 }
@@ -94,29 +110,38 @@ async function generateThumbnailWithDallE(prompt: string) {
   include shocked/excited expressions, and make it instantly clickable with 
   exaggerated elements. Use high contrast and dynamic composition.`;
 
-  const response = await fetch('https://api.openai.com/v1/images/generations', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "dall-e-3",
-      prompt: enhancedPrompt,
-      n: 1,
-      size: "1792x1024",
-      quality: "standard",
-    }),
-  });
+  try {
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "dall-e-3",
+        prompt: enhancedPrompt,
+        n: 1,
+        size: "1792x1024",
+        quality: "standard",
+      }),
+    });
 
-  const data = await response.json();
-  console.log('DALL-E response:', data);
+    if (!response.ok) {
+      throw new Error('DALL-E API request failed');
+    }
 
-  if (!data.data?.[0]?.url) {
+    const data = await response.json();
+    console.log('DALL-E response:', data);
+
+    if (!data.data?.[0]?.url) {
+      throw new Error('Invalid response from DALL-E');
+    }
+
+    return data.data[0].url;
+  } catch (error) {
+    console.error('Error in DALL-E API call:', error);
     throw new Error('Failed to generate thumbnail with DALL-E');
   }
-
-  return data.data[0].url;
 }
 
 // Generate thumbnail using Imagen 3
@@ -128,37 +153,65 @@ async function generateThumbnailWithImagen(prompt: string) {
   include shocked/excited expressions, and make it instantly clickable with 
   exaggerated elements. Use high contrast and dynamic composition.`;
 
-  const response = await fetch('https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:generateImages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': GEMINI_API_KEY,
-    },
-    body: JSON.stringify({
-      prompt: enhancedPrompt,
-      generation_config: {
-        numberOfImages: 1,
+  try {
+    const response = await fetch('https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:generateImages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': GEMINI_API_KEY,
       },
-    }),
-  });
+      body: JSON.stringify({
+        prompt: enhancedPrompt,
+        generation_config: {
+          numberOfImages: 1,
+        },
+      }),
+    });
 
-  const data = await response.json();
-  console.log('Imagen response:', data);
+    if (!response.ok) {
+      throw new Error('Imagen API request failed');
+    }
 
-  if (!data.images?.[0]?.imageUrl) {
+    const data = await response.json();
+    console.log('Imagen response:', data);
+
+    if (!data.images?.[0]?.imageUrl) {
+      throw new Error('Invalid response from Imagen');
+    }
+
+    return data.images[0].imageUrl;
+  } catch (error) {
+    console.error('Error in Imagen API call:', error);
     throw new Error('Failed to generate thumbnail with Imagen');
   }
-
-  return data.images[0].imageUrl;
 }
 
 serve(async (req) => {
+  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
 
   try {
     const { youtubeUrl, uploadedImageUrl, customPrompt, model = 'dalle' } = await req.json();
+    
+    // Validate inputs
+    if (!youtubeUrl && !uploadedImageUrl && !customPrompt) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'No input provided',
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -172,56 +225,117 @@ serve(async (req) => {
     if (youtubeUrl) {
       const videoId = getVideoId(youtubeUrl);
       if (!videoId) {
-        throw new Error('Invalid YouTube URL');
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'Invalid YouTube URL',
+          }),
+          { 
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
       }
 
-      // Fetch video details from YouTube API
-      const ytResponse = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-      );
-      const ytData = await ytResponse.json();
-      
-      if (!ytData.items?.[0]?.snippet) {
-        throw new Error('Video not found');
-      }
+      try {
+        // Fetch video details from YouTube API
+        const ytResponse = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
+        );
 
-      originalTitle = ytData.items[0].snippet.title;
-      const thumbnailUrl = ytData.items[0].snippet.thumbnails.maxres?.url || 
+        if (!ytResponse.ok) {
+          throw new Error('YouTube API request failed');
+        }
+
+        const ytData = await ytResponse.json();
+        
+        if (!ytData.items?.[0]?.snippet) {
+          throw new Error('Video not found');
+        }
+
+        originalTitle = ytData.items[0].snippet.title;
+        const thumbnailUrl = ytData.items[0].snippet.thumbnails.maxres?.url || 
                           ytData.items[0].snippet.thumbnails.high?.url;
 
-      generatedTitles = await generateTitlesWithGemini(thumbnailUrl, originalTitle);
+        generatedTitles = await generateTitlesWithGemini(thumbnailUrl, originalTitle);
+      } catch (error) {
+        console.error('Error processing YouTube URL:', error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message,
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
     }
 
     // Handle uploaded image input
     if (uploadedImageUrl) {
-      generatedTitles = await generateTitlesWithGemini(uploadedImageUrl, null);
+      try {
+        generatedTitles = await generateTitlesWithGemini(uploadedImageUrl, null);
+      } catch (error) {
+        console.error('Error processing uploaded image:', error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message,
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
+      }
     }
 
     // Handle custom prompt for thumbnail generation
     if (customPrompt) {
-      // Choose model based on user preference
-      generatedThumbnailUrl = model === 'dalle' 
-        ? await generateThumbnailWithDallE(customPrompt)
-        : await generateThumbnailWithImagen(customPrompt);
+      try {
+        // Choose model based on user preference
+        generatedThumbnailUrl = model === 'dalle' 
+          ? await generateThumbnailWithDallE(customPrompt)
+          : await generateThumbnailWithImagen(customPrompt);
 
-      if (generatedThumbnailUrl) {
-        // Generate new titles based on the generated thumbnail
-        generatedTitles = await generateTitlesWithGemini(generatedThumbnailUrl, customPrompt);
+        if (generatedThumbnailUrl) {
+          // Generate new titles based on the generated thumbnail
+          generatedTitles = await generateTitlesWithGemini(generatedThumbnailUrl, customPrompt);
+        }
+      } catch (error) {
+        console.error('Error generating thumbnail:', error);
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: error.message,
+          }),
+          { 
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          }
+        );
       }
     }
 
     // Store results in Supabase
-    const { error: dbError } = await supabase
-      .from('thumbnails')
-      .insert({
-        youtube_url: youtubeUrl || null,
-        original_title: originalTitle,
-        generated_titles: generatedTitles,
-        generated_thumbnail_url: generatedThumbnailUrl,
-        custom_prompt: customPrompt || null,
-      });
+    try {
+      const { error: dbError } = await supabase
+        .from('thumbnails')
+        .insert({
+          youtube_url: youtubeUrl || null,
+          original_title: originalTitle,
+          generated_titles: generatedTitles,
+          generated_thumbnail_url: generatedThumbnailUrl,
+          custom_prompt: customPrompt || null,
+        });
 
-    if (dbError) throw dbError;
+      if (dbError) throw dbError;
+    } catch (error) {
+      console.error('Error storing results in database:', error);
+      // Don't fail the request if database storage fails
+    }
 
     return new Response(
       JSON.stringify({
@@ -232,19 +346,22 @@ serve(async (req) => {
           generatedThumbnailUrl,
         },
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
     );
   } catch (error) {
     console.error('Error in generate-thumbnail function:', error);
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : 'An unknown error occurred',
       }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      },
+      }
     );
   }
 });
