@@ -1,10 +1,16 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.7.1'
 
 const YOUTUBE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+
+// Add debug logging for API keys (only logging presence, not the actual keys)
+console.log('API Keys present:', {
+  youtubeApiKey: !!YOUTUBE_API_KEY,
+  geminiApiKey: !!GEMINI_API_KEY,
+  openAiApiKey: !!OPENAI_API_KEY
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -196,10 +202,14 @@ serve(async (req) => {
   }
 
   try {
-    const { youtubeUrl, uploadedImageUrl, customPrompt, model = 'dalle' } = await req.json();
+    const body = await req.json();
+    console.log('Received request:', body);
+
+    const { youtubeUrl, uploadedImageUrl, customPrompt, model = 'dalle' } = body;
     
     // Validate inputs
     if (!youtubeUrl && !uploadedImageUrl && !customPrompt) {
+      console.log('No input provided');
       return new Response(
         JSON.stringify({
           success: false,
@@ -225,6 +235,7 @@ serve(async (req) => {
     if (youtubeUrl) {
       const videoId = getVideoId(youtubeUrl);
       if (!videoId) {
+        console.log('Invalid YouTube URL:', youtubeUrl);
         return new Response(
           JSON.stringify({
             success: false,
@@ -237,40 +248,49 @@ serve(async (req) => {
         );
       }
 
-      try {
-        // Fetch video details from YouTube API
-        const ytResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`
-        );
+      console.log('Fetching YouTube video:', videoId);
+      
+      // Fetch video details from YouTube API
+      const ytUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YOUTUBE_API_KEY}`;
+      console.log('YouTube API URL:', ytUrl);
 
-        if (!ytResponse.ok) {
-          throw new Error('YouTube API request failed');
-        }
-
-        const ytData = await ytResponse.json();
-        
-        if (!ytData.items?.[0]?.snippet) {
-          throw new Error('Video not found');
-        }
-
-        originalTitle = ytData.items[0].snippet.title;
-        const thumbnailUrl = ytData.items[0].snippet.thumbnails.maxres?.url || 
-                          ytData.items[0].snippet.thumbnails.high?.url;
-
-        generatedTitles = await generateTitlesWithGemini(thumbnailUrl, originalTitle);
-      } catch (error) {
-        console.error('Error processing YouTube URL:', error);
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: error.message,
-          }),
-          { 
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-          }
-        );
+      const ytResponse = await fetch(ytUrl);
+      
+      if (!ytResponse.ok) {
+        const ytError = await ytResponse.text();
+        console.error('YouTube API Error:', ytError);
+        throw new Error(`YouTube API request failed: ${ytError}`);
       }
+
+      const ytData = await ytResponse.json();
+      console.log('YouTube API Response:', ytData);
+      
+      if (!ytData.items?.[0]?.snippet) {
+        throw new Error('Video not found');
+      }
+
+      const originalTitle = ytData.items[0].snippet.title;
+      const thumbnailUrl = ytData.items[0].snippet.thumbnails.maxres?.url || 
+                        ytData.items[0].snippet.thumbnails.high?.url;
+
+      console.log('Generating titles for:', { originalTitle, thumbnailUrl });
+      
+      const generatedTitles = await generateTitlesWithGemini(thumbnailUrl, originalTitle);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            originalTitle,
+            generatedTitles,
+            generatedThumbnailUrl: null,
+          },
+        }),
+        { 
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     // Handle uploaded image input
