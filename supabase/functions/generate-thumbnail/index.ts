@@ -86,7 +86,7 @@ async function generateTitlesWithGemini(imageUrl: string | null, context: string
 }
 
 // Generate thumbnail using DALL-E
-async function generateThumbnail(prompt: string) {
+async function generateThumbnailWithDallE(prompt: string) {
   console.log('Generating thumbnail with DALL-E:', { prompt });
   
   const enhancedPrompt = `Create a YouTube thumbnail in MrBeast's style: ${prompt}. 
@@ -113,10 +113,43 @@ async function generateThumbnail(prompt: string) {
   console.log('DALL-E response:', data);
 
   if (!data.data?.[0]?.url) {
-    throw new Error('Failed to generate thumbnail');
+    throw new Error('Failed to generate thumbnail with DALL-E');
   }
 
   return data.data[0].url;
+}
+
+// Generate thumbnail using Imagen 3
+async function generateThumbnailWithImagen(prompt: string) {
+  console.log('Generating thumbnail with Imagen:', { prompt });
+
+  const enhancedPrompt = `Create a YouTube thumbnail in MrBeast's style: ${prompt}. 
+  Make it bold and dramatic with bright colors (red, yellow, blue), 
+  include shocked/excited expressions, and make it instantly clickable with 
+  exaggerated elements. Use high contrast and dynamic composition.`;
+
+  const response = await fetch('https://generativelanguage.googleapis.com/v1/models/imagen-3.0-generate-002:generateImages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_API_KEY,
+    },
+    body: JSON.stringify({
+      prompt: enhancedPrompt,
+      generation_config: {
+        numberOfImages: 1,
+      },
+    }),
+  });
+
+  const data = await response.json();
+  console.log('Imagen response:', data);
+
+  if (!data.images?.[0]?.imageUrl) {
+    throw new Error('Failed to generate thumbnail with Imagen');
+  }
+
+  return data.images[0].imageUrl;
 }
 
 serve(async (req) => {
@@ -125,7 +158,7 @@ serve(async (req) => {
   }
 
   try {
-    const { youtubeUrl, uploadedImageUrl, customPrompt } = await req.json();
+    const { youtubeUrl, uploadedImageUrl, customPrompt, model = 'dalle' } = await req.json();
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -166,7 +199,11 @@ serve(async (req) => {
 
     // Handle custom prompt for thumbnail generation
     if (customPrompt) {
-      generatedThumbnailUrl = await generateThumbnail(customPrompt);
+      // Choose model based on user preference
+      generatedThumbnailUrl = model === 'dalle' 
+        ? await generateThumbnailWithDallE(customPrompt)
+        : await generateThumbnailWithImagen(customPrompt);
+
       if (generatedThumbnailUrl) {
         // Generate new titles based on the generated thumbnail
         generatedTitles = await generateTitlesWithGemini(generatedThumbnailUrl, customPrompt);

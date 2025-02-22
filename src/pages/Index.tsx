@@ -9,6 +9,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Youtube, Upload, Wand2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 export default function Index() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -18,6 +20,7 @@ export default function Index() {
   const [imageTitles, setImageTitles] = useState<string[]>([]);
   const [generatedThumbnail, setGeneratedThumbnail] = useState<string | null>(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<'dalle' | 'imagen'>('dalle');
 
   const handleUrlGenerate = async () => {
     if (!youtubeUrl) {
@@ -96,7 +99,7 @@ export default function Index() {
     setIsAnalyzing(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-thumbnail', {
-        body: { customPrompt }
+        body: { customPrompt, model: selectedModel }
       });
 
       if (error) throw error;
@@ -194,6 +197,25 @@ export default function Index() {
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   className="bg-[#333] border-[#444] text-white"
                 />
+                
+                <div className="space-y-3">
+                  <Label className="text-white">Choose Model</Label>
+                  <RadioGroup
+                    value={selectedModel}
+                    onValueChange={(value) => setSelectedModel(value as 'dalle' | 'imagen')}
+                    className="flex gap-4"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="dalle" id="dalle" />
+                      <Label htmlFor="dalle" className="text-white">DALL-E 3</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="imagen" id="imagen" />
+                      <Label htmlFor="imagen" className="text-white">Imagen 3</Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
                 <Button
                   onClick={generateThumbnail}
                   disabled={isAnalyzing}
